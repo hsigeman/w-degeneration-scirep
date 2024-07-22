@@ -1,0 +1,10 @@
+samples:
+    QF-1504-CISJUN-2_S6_L002 : QF-1504-CISJUN-2_S6_L002
+    QF-1504-RA5680_S5_L002 : QF-1504-RA5680_S5_L002
+species: Cisticola_juncidis
+female: QF-1504-CISJUN-2_S6_L002
+male: QF-1504-RA5680_S5_L002
+fastq: /proj/sllstore2017102/private/delivery00413_trimmed_fastq/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

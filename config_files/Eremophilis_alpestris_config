@@ -1,0 +1,10 @@
+samples:
+    QF-1504-H-88_S7_L003 : QF-1504-H-88_S7_L003
+    QF-1504-H-19_S8_L003 : QF-1504-H-19_S8_L003
+species: Eremophilis_alpestris
+female: QF-1504-H-19_S8_L003
+male: QF-1504-H-88_S7_L003
+fastq: /proj/sllstore2017102/private/delivery00413_trimmed_fastq/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

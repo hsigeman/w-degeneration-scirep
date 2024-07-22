@@ -1,0 +1,10 @@
+samples:
+    QL-1681-246_S51_L008 : QL-1681-246_S51_L008
+    QL-1681-95694_S52_L008 : QL-1681-95694_S52_L008
+species: Alauda_razae
+female: QL-1681-95694_S52_L008
+male: QL-1681-246_S51_L008
+fastq: /proj/sllstore2017102/private/QL-1681_trimmed_fastq/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

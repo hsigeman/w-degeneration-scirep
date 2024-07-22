@@ -1,0 +1,10 @@
+samples:
+    QL-1681-19_S46_L006 : QL-1681-19_S46_L006
+    QL-1681-21_S47_L006 : QL-1681-21_S47_L006
+species: Alauda_arvensis
+female: QL-1681-19_S46_L006
+male: QL-1681-21_S47_L006
+fastq: /proj/sllstore2017102/private/QL-1681_trimmed_fastq/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

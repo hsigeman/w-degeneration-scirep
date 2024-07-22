@@ -1,0 +1,10 @@
+samples:
+    SJ-2333-Sbra-878_S26_L002 : SJ-2333-Sbra-878_S26_L002
+    SJ-2333-Sbra-553_S28_L002 : SJ-2333-Sbra-553_S28_L002
+species: Sylvietta_brachyura
+male: SJ-2333-Sbra-878_S26_L002
+female: SJ-2333-Sbra-553_S28_L002
+fastq: /proj/uppstore2018211/delivery02942/trimmed_files_birds/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

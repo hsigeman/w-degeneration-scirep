@@ -1,0 +1,10 @@
+samples:
+    TI-2672-Cbwil-143 : TI-2672-Cbwil-143
+    TI-2672-Cbwil-146 : TI-2672-Cbwil-146
+species: Calandrella_cinerea
+male: TI-2672-Cbwil-143
+female: TI-2672-Cbwil-146
+fastq: /proj/snic2020-2-25/private/trimmed_data/delivery03951/trimmed/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final

@@ -1,0 +1,10 @@
+samples:
+    TI-2672-Cbre-802 : TI-2672-Cbre-802
+    TI-2672-Cbre-755 : TI-2672-Cbre-755
+species: Camaroptera_brevicaudata
+male: TI-2672-Cbre-802
+female: TI-2672-Cbre-755
+fastq: /proj/snic2020-2-25/private/trimmed_data/delivery03951/trimmed/
+ref_species: ZF
+ref_dir: data/external_raw/genome/
+ref_name: Taeniopygia_guttata.taeGut3.2.4.dna.toplevel_final
