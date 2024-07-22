@@ -1,0 +1,593 @@
+from snakemake.utils import min_version
+min_version("4.4.0")
+
+
+# Snakefile for The rate of W chromosome degeneration across multiple avian neo-sex chromosomes, Sigeman et al. 2024. Scientific Reports.
+# Hanna Sigeman July 2024
+
+dir_path = os.getcwd()
+
+###############################################
+################## PATHS ######################
+###############################################
+
+ID = config["samples"]
+SPECIES = config["species"]
+FEMALE = config["female"]
+MALE = config["male"]
+FQ_DIR = config["fastq"]
+REF_SPECIES = config["ref_species"]
+REF_DIR = config["ref_dir"]
+REF_NAME = config["ref_name"]
+PREFIX = SPECIES + "_ref_" + REF_SPECIES
+
+REF_PATH = REF_DIR + REF_NAME
+REF_FASTA = REF_DIR + REF_NAME + ".fasta"
+MAP_DIR_NGM = "intermediate/ngm_ZF/" + PREFIX + "/"
+GENCOV_DIR_NGM = "intermediate/bedtools_ZF_ngm_exon/" + PREFIX + "/"
+VCF_DIR_NGM = "intermediate/freebayes_ZF_ngm_exon_intron/" + PREFIX + "/"
+GENES = "data/meta/gene_coord_filenames_trans_whole_transcript_merged.bed"
+GENE_BED = "data/meta/gene_coord_filenames_trans_whole_transcript.bed"
+EXON_INTRON_BED = "data/meta/gene_coord_filenames_trans_exon_intron.sorted.bed"
+EXON_BED="data/meta/gene_coord_filenames_trans_exon_merge.bed"
+GTF="data/meta/Taeniopygia_guttata.taeGut3.2.4.92.longestTranscript.gtf"
+GFF="data/meta/Taeniopygia_guttata.taeGut3.2.4.92.longestTranscript.gff"
+GFF_AUTO="data/meta/Taeniopygia_guttata.taeGut3.2.4.92.longestTranscript.100autosomal.gff"
+###############################################
+################## RULES ######################
+###############################################
+
+rule all: 
+     input: 
+        REF_FASTA + ".bwt",
+        REF_FASTA + ".fai" ,
+        expand(MAP_DIR_NGM + "{S}" + ".sorted.nodup.status", S = ID),
+        expand(MAP_DIR_NGM + "{S}" + ".sorted.nodup.bam.bai", S = ID),
+        expand(MAP_DIR_NGM + "{S}" + ".sorted.nodup.flagstat", S = ID),
+        GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.ExonIntron.status",
+        GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.parallel.ExonIntron.out",
+        GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.parallel.ExonIntron.out.status",
+        VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrHetSites.ExonIntron.out",
+        VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrHetSites.ExonIntron.out",
+        VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.out",
+        VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.out",
+        VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out",
+        VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out",
+        VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.cds.liftoff.polished.validORF.fasta",
+#        VCF_DIR_NGM + SPECIES + ".LOF.final.out",
+#        VCF_DIR_NGM + SPECIES + ".Het.final.out",
+#        VCF_DIR_NGM + SPECIES + ".0.8.LOF.final.out",
+#        VCF_DIR_NGM + SPECIES + ".0.8.Het.final.out",
+#        VCF_DIR_NGM + SPECIES + ".0.8.dNdS.final.out",
+#        VCF_DIR_NGM + SPECIES + ".filterchange.dNdS.final.out",
+#        VCF_DIR_NGM + SPECIES + ".filterchange.LOF.final.out",
+#        VCF_DIR_NGM + SPECIES + ".filterchange.Het.final.out",
+#        VCF_DIR_NGM + SPECIES + ".genes.vcf.status",
+#        VCF_DIR_NGM + SPECIES + ".genes.filt.singleton"
+
+
+
+##########################################################  
+##################### INDEX GENOME #######################      
+##########################################################
+
+rule index_fasta_bwa:
+    input: 
+        ref = REF_FASTA
+    output:
+        ref_bwt = REF_FASTA + ".bwt" 
+    priority : 80   
+    message:
+        """--- Indexing {input} with BWA index."""
+    threads: 2
+    conda:
+        "envs/bwa.yaml"
+    shell:
+        """
+        bwa index {input}
+        """
+
+rule index_fasta_samtools: 
+    input: 
+        ref = REF_FASTA
+    output: 
+        ref_fai = REF_FASTA + ".fai"
+    priority : 70
+    threads: 2
+    conda:
+        "envs/samtools.yaml"
+    shell: 
+        """
+        samtools faidx {input}
+        """
+
+rule count_reads: 
+    input: 
+        R1= FQ_DIR + "{S}_reverse_paired.fq.gz"
+    output: 
+        GENCOV_DIR_NGM + "{S}" + "_fastq_readcount.out"
+    shell:
+        """ 
+        echo {input.R1} | tr '\\n' '\\t' ; zcat {input.R1} | echo $((`wc -l`/4)) > {output}
+        """ 
+
+
+##########################################################  
+######################## MAPPING #########################       
+##########################################################   
+
+########################## NGM #########################
+
+rule map_ngm: 
+    input: 
+        R1= FQ_DIR + "{S}_forward_paired.fq.gz",
+        R2= FQ_DIR + "{S}_reverse_paired.fq.gz",
+        ref = REF_FASTA, 
+        ref_bwt = REF_FASTA + ".bwt"
+    output: 
+        temp(MAP_DIR_NGM + "{S}" + ".bam")
+    message: "Mapping reads to ref"
+    threads: 19
+    params:
+        rg="{S}"
+    conda:
+        "envs/ngm.yaml"
+    shell:
+        """ 
+        ngm -r {input.ref} -1 {input.R1} -2 {input.R2}  -t {threads} --rg-id {params.rg} --rg-sm {params.rg} | samtools view -Sb - > {output}
+        """ 
+
+rule sort_bam_ngm:
+    input:
+        MAP_DIR_NGM + "{S}" + ".bam"
+    output:
+        out = temp(MAP_DIR_NGM + "{S}" + ".sorted.bam"),
+        log = MAP_DIR_NGM + "{S}" + ".sorted.status"
+    threads: 3
+    params:
+        tmpdir = MAP_DIR_NGM + "{S}" + "_temp_sort/"
+    conda:
+        "envs/samtools.yaml"
+    shell:
+        """
+        mkdir {params.tmpdir}
+        samtools sort -@ {threads} {input} -T {params.tmpdir} > {output.out}
+        rm -r {params.tmpdir}
+        echo "DONE" > {output.log}
+        """
+
+rule remove_duplicates_ngm: 
+    input: 
+        MAP_DIR_NGM + "{S}" + ".sorted.bam"
+    output: 
+        out = MAP_DIR_NGM + "{S}" + ".sorted.nodup.bam",
+        log = MAP_DIR_NGM + "{S}" + ".sorted.nodup.status"
+    params:
+        tmpdir = MAP_DIR_NGM + "{S}" + "_temp_dupl/"
+    conda:
+        "envs/picard.yaml"
+    shell: 
+        """
+        mkdir -p {params.tmpdir}
+        picard MarkDuplicates -Xmx10g MAX_FILE_HANDLES=500 REMOVE_DUPLICATES=true I={input} O={output.out} M={input}_duplicatedata.txt TMP_DIR={params.tmpdir}
+        rm -r {params.tmpdir}
+        echo "DONE" > {output.log}
+        """
+
+rule index_bam_ngm: 
+    input: 
+        MAP_DIR_NGM + "{S}" + ".sorted.nodup.bam"
+    output: 
+        MAP_DIR_NGM + "{S}" + ".sorted.nodup.bam.bai"
+    threads: 1
+    conda:
+        "envs/samtools.yaml"
+    shell: 
+        """
+        samtools index {input}
+        """
+
+rule flagstat_ngm:
+    input:
+      nodup = MAP_DIR_NGM + "{S}" + ".sorted.nodup.bam"
+    output:
+      nodup = MAP_DIR_NGM + "{S}" + ".sorted.nodup.flagstat"
+    conda:
+        "envs/samtools.yaml"
+    shell:
+        """
+        samtools flagstat {input.nodup} > {output.nodup} 
+        """
+
+
+##########################################################  
+#################### GENOME COVERAGE #####################       
+########################################################## 
+
+
+rule coverage_genes_ngm_bamstat04_parallell:
+    input: 
+        f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam",
+        m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam",
+        bai_f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam.bai",
+        bai_m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam.bai",
+        bed = GENES
+    params:
+        outdir = GENCOV_DIR_NGM + "depth_files/"
+    output: 
+        GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.ExonIntron.status"
+    threads: 18
+    shell: 
+        """
+        mkdir -p {params.outdir}
+        parallel -j 17 'java -jar code/jvarkit/dist/bamstats04.jar -B data/meta/exon_intron_ranges/{{}}.bed {input.f} {input.m} > {params.outdir}{{}}.bamstat04.depth' :::: data/meta/geneList.txt
+        echo "DONE" > {output}
+        """
+
+rule coverage_genes_ngm_bamstat04_parallell_edit:
+    input: 
+        GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.ExonIntron.status",
+        bed = GENES
+    params:
+        outdir = GENCOV_DIR_NGM + "depth_files/"
+    output: 
+        out = GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.parallel.ExonIntron.out",
+        status = GENCOV_DIR_NGM + SPECIES + ".genes.coverage.bamstat04.F.M.parallel.ExonIntron.out.status"
+    threads: 18
+    shell: 
+        """
+        echo -e "#Trans\tchrom\tstart\tend\tlength\tsample\tmincov\tmaxcov\tavgcov_0\tmediancov_0\tnocoveragebp_0\tpercentcovered_0" > {output.out}
+        awk '{{print FILENAME "\t" $0}}' {params.outdir}* | sed 's/depth_files\//\t/' | sed 's/.bamstat04.depth//' | cut -f 2-13 | grep -v mediancov >> {output.out}
+
+        echo "DONE" > {output.status}
+
+        rm -r {params.outdir}
+        """
+
+
+##########################################################  
+#################### VARIANT CALLING #####################      
+########################################################## 
+
+
+######################## NGM ############################
+
+rule freebayes_male_gene_ngm:
+    input: 
+        ref = REF_FASTA,
+        bed = GENES,
+        m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam",
+        bai_m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam.bai"
+    output: 
+        vcf = VCF_DIR_NGM + SPECIES + ".male.genes.vcf",
+        log = VCF_DIR_NGM + SPECIES + ".male.genes.vcf.status"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        freebayes -t {input.bed} -f {input.ref} {input.m} > {output.vcf}
+        echo "DONE" > {output.log}
+        """
+
+rule freebayes_female_gene_ngm:
+    input: 
+        ref = REF_FASTA,
+        bed = GENES,
+        f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam",
+        bai_f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam.bai"
+    output: 
+        vcf = VCF_DIR_NGM + SPECIES + ".female.genes.vcf",
+        log = VCF_DIR_NGM + SPECIES + ".female.genes.vcf.status"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        freebayes -t {input.bed} -f {input.ref} {input.f} > {output.vcf}
+        echo "DONE" > {output.log}
+        """
+
+rule freebayes_gene_ngm:
+    input: 
+        ref = REF_FASTA,
+        bed = GENES,
+        f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam",
+        bai_f = MAP_DIR_NGM + FEMALE + ".sorted.nodup.bam.bai",
+        m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam",
+        bai_m = MAP_DIR_NGM + MALE + ".sorted.nodup.bam.bai"
+    output: 
+        vcf = VCF_DIR_NGM + SPECIES + ".genes.vcf",
+        log = VCF_DIR_NGM + SPECIES + ".genes.vcf.status",
+        vcf_filter = VCF_DIR_NGM + SPECIES + ".genes.filt.vcf",
+        singleton = VCF_DIR_NGM + SPECIES + ".genes.filt.singleton"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        freebayes -t {input.bed} -f {input.ref} {input.f} {input.m} > {output.vcf}
+        echo "DONE" > {output.log}
+        vcftools --vcf {output.vcf} --non-ref-ac 1 --remove-filtered-all --recode --stdout --minQ 20 --minDP 5 > {output.vcf_filter}
+        vcftools --vcf {output.vcf_filter} --singletons --out --stdout > {output.singleton}
+        """
+
+
+
+rule freebayes_gene_ngm_filter:
+    input: 
+        VCF_DIR_NGM + SPECIES + ".genes.vcf"
+    output:
+        VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.ac1.af.mqm.paired.vcf"
+    params: 
+        one = VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.vcf",
+        two = VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.dp.vcf",
+        three = VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.ac1.vcf",
+        four = VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.ac1.af.vcf",
+        five = VCF_DIR_NGM + SPECIES + ".genes.q30.nomissing.ac1.af.mqm.vcf"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        vcftools --vcf {input} --minQ 30 --max-missing 1 --recode --recode-INFO-all --stdout > {params.one}
+        vcftools --vcf {params.one} --minDP 5 --recode --recode-INFO-all --stdout > {params.two}
+        vcftools --vcf {params.two} --non-ref-ac 1 --recode --recode-INFO-all --stdout > {params.three}
+        vcffilter -s -f "AB > 0.25 & AB < 0.75 | AB < 0.01" {params.three} > {params.four}
+        vcffilter -f "MQM / MQMR > 0.9 & MQM / MQMR < 1.05" {params.four} > {params.five}
+        vcffilter -f "PAIRED > 0.05 & PAIREDR > 0.05 & PAIREDR / PAIRED < 1.75 & PAIREDR / PAIRED > 0.25 | PAIRED < 0.05 & PAIREDR < 0.05" -s {params.five} > {output}
+        """
+
+rule freebayes_female_gene_ngm_filter:
+    input: 
+        VCF_DIR_NGM + SPECIES + ".female.genes.vcf"
+    output:
+        one = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.vcf",
+        two = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.vcf",
+        three = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.vcf"
+    params: 
+        one = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.vcf",
+        two = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.dp.vcf",
+        three = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.vcf",
+        four = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.vcf",
+        five = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.vcf",
+        six = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.vcf"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        vcftools --vcf {input} --minQ 30 --max-missing 1 --recode --recode-INFO-all --stdout > {params.one}
+        vcftools --vcf {params.one} --minDP 5 --recode --recode-INFO-all --stdout > {params.two}
+        vcftools --vcf {params.two} --non-ref-ac 1 --recode --recode-INFO-all --stdout > {params.three}
+        vcffilter -s -f "AB > 0.25 & AB < 0.75 | AB < 0.01" {params.three} > {output.three}
+        vcffilter -f "MQM / MQMR > 0.9 & MQM / MQMR < 1.05" {output.three} > {params.five}
+        vcffilter -f "PAIRED > 0.05 & PAIREDR > 0.05 & PAIREDR / PAIRED < 1.75 & PAIREDR / PAIRED > 0.25 | PAIRED < 0.05 & PAIREDR < 0.05" -s {params.five} > {output.one}
+        
+        vcffilter -f "MQM / MQMR > 0.8 & MQM / MQMR < 1.1" {params.four} > {params.six}
+        vcffilter -f "PAIRED > 0.05 & PAIREDR > 0.05 & PAIREDR / PAIRED < 1.75 & PAIREDR / PAIRED > 0.25 | PAIRED < 0.05 & PAIREDR < 0.05" -s {params.six} > {output.two}
+        """
+
+
+rule freebayes_male_gene_ngm_filter:
+    input: 
+        VCF_DIR_NGM + SPECIES + ".male.genes.vcf"
+    output:
+        one = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.vcf",
+        two = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.vcf",
+        three = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.vcf"
+    params: 
+        one = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.vcf",
+        two = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.dp.vcf",
+        three = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.vcf",
+        four = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.vcf",
+        five = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.vcf",
+        six = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.vcf"
+    conda:
+        "envs/freebayes.yaml"
+    shell: 
+        """
+        vcftools --vcf {input} --minQ 30 --max-missing 1 --recode --recode-INFO-all --stdout > {params.one}
+        vcftools --vcf {params.one} --minDP 5 --recode --recode-INFO-all --stdout > {params.two}
+        vcftools --vcf {params.two} --non-ref-ac 1 --recode --recode-INFO-all --stdout > {params.three}
+        vcffilter -s -f "AB > 0.25 & AB < 0.75 | AB < 0.01" {params.three} > {output.three}
+        vcffilter -f "MQM / MQMR > 0.9 & MQM / MQMR < 1.05" {output.three} > {params.five}
+        vcffilter -f "PAIRED > 0.05 & PAIREDR > 0.05 & PAIREDR / PAIRED < 1.75 & PAIREDR / PAIRED > 0.25 | PAIRED < 0.05 & PAIREDR < 0.05" -s {params.five} > {output.one}
+
+        vcffilter -f "MQM / MQMR > 0.8 & MQM / MQMR < 1.1" {params.four} > {params.six}
+        vcffilter -f "PAIRED > 0.05 & PAIREDR > 0.05 & PAIREDR / PAIRED < 1.75 & PAIREDR / PAIRED > 0.25 | PAIRED < 0.05 & PAIREDR < 0.05" -s {params.six} > {output.two}
+        """
+
+
+rule snpEff_female:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"female"}}' > {output.snpSiftLOF_full}
+        """
+
+rule snpEff_male:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"male"}}' > {output.snpSiftLOF_full}
+        """
+
+
+rule snpEff_female_08:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"female"}}' > {output.snpSiftLOF_full}
+        """
+
+rule snpEff_male_08:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.mqm.0.8.paired.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"male"}}' > {output.snpSiftLOF_full}
+        """
+
+rule snpEff_male_filterchange:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"male"}}' > {output.snpSiftLOF_full}
+        """
+
+rule snpEff_female_filterchange:
+    input: 
+        vcf = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.vcf",
+        genes = EXON_INTRON_BED
+    output:
+        snpEff = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.snpEff.vcf",
+        snpSiftHet = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.snpEff.nrHetSites.ExonIntron.out",
+        snpSiftLOF = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.snpEff.nrLOFSites.ExonIntron.out",
+        snpSiftLOF_full = VCF_DIR_NGM + SPECIES + ".female.genes.q30.nomissing.ac1.af.snpEff.nrLOFSites.ExonIntron.fullInfo.out"
+    shell: 
+        """
+        ~/bin/snpEff/scripts/snpEff ann taeGut3.2.4.86 {input.vcf} > {output.snpEff}
+        cat {output.snpEff} | java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "((countHet() > 0))" | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftHet}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | bedtools intersect -a {input.genes} -b stdin -c > {output.snpSiftLOF}
+
+        java -jar /home/hannas/bin/snpEff/SnpSift.jar filter "(exists LOF[*].PERC) & (LOF[*].PERC > 0.5)" {output.snpEff} | perl /home/hannas/bin/snpEff/scripts/vcfEffOnePerLine.pl | java -jar /home/hannas/bin/snpEff/SnpSift.jar extractFields - CHROM POS REF ALT AF "ANN[*].EFFECT" "ANN[*].GENEID" "ANN[*].DISTANCE" | awk -v OFS="\t" '{{if($8=="0") print $1,$2-1,$2,$3,$4,$5,$6,$7,$8}}' | bedtools intersect -a {input.genes} -b stdin -loj | awk -v OFS="\t" '{{ print $0,"female"}}' > {output.snpSiftLOF_full}
+        """
+
+
+rule filter_vcf_exon:
+    input: 
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.vcf",
+        ref = REF_FASTA,
+        exon = EXON_BED
+    output:
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.vcf.gz",
+    conda:
+        "envs/bcftools.yaml"
+    shell: 
+        """
+        bgzip -c {input.male} > {input.male}.gz
+        tabix -p vcf {input.male}.gz
+        bcftools index {input.male}.gz
+        bcftools filter {input.male}.gz -R {input.exon} -O b -o {output.male}
+        """
+
+
+rule consensus_genome:
+    input: 
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.vcf.gz",
+        ref = REF_FASTA,
+        exon = EXON_BED
+    output:
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.fasta",
+        chain = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.chain",
+    conda:
+        "envs/bcftools.yaml"
+    shell: 
+        """
+        bcftools index {input.male}
+        cat {input.ref} | bcftools consensus --haplotype A -c {output.chain} {input.male} > {output.male} 
+        """
+
+
+rule liftoff:
+    input: 
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.fasta",
+        gtf = GTF,
+        ref = REF_FASTA
+    output:
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.liftoff.gtf",
+        male_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.liftoff.gtf_polished",
+    conda:
+        "envs/liftoff.yaml"
+    shell: 
+        """
+        gffread -E --keep-genes {input.gtf} -o- > {input.gtf}.genes
+        liftoff -g {input.gtf}.genes {input.male} {input.ref} -mm2_options="-r 2k -z 5000" -polish -o {output.male} 
+        """
+
+
+rule get_fasta:
+    input: 
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.exon.fasta",
+        gff_auto = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.liftoff.gtf",
+        gff_auto_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.liftoff.gtf_polished",
+    output:
+        male = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.cds.liftoff.fasta",
+        male_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.cds.liftoff.polished.fasta",
+    conda:
+        "envs/liftoff.yaml"
+    shell: 
+        """
+        gffread -x {output.male} -g {input.male} {input.gff_auto}
+        gffread -x {output.male_polished} -g {input.male} {input.gff_auto_polished}
+        """
+
+rule valid_orf_fasta:
+    input: 
+        gff_auto_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.liftoff.gtf_polished",
+        male_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.cds.liftoff.polished.fasta",
+    output:
+        male_polished = VCF_DIR_NGM + SPECIES + ".male.genes.q30.nomissing.ac1.af.cds.liftoff.polished.validORF.fasta",
+    conda:
+        "envs/seqtk.yaml"
+    shell: 
+        """
+        grep "valid_ORF=True" {input.gff_auto_polished} | cut -f 9 | sed 's/;/\t/' | cut -f 1 | sed 's/ID=//' > {input.gff_auto_polished}.trans.list
+        seqtk subseq {input.male_polished} {input.gff_auto_polished}.trans.list > {output.male_polished} 
+        """
