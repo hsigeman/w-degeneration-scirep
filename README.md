@@ -1,5 +1,6 @@
-# Code for analyses in Sigeman et al. 2024
-### Sigeman, H., Downing, P.A., Zhang, H. et al. The rate of W chromosome degeneration across multiple avian neo-sex chromosomes. Sci Rep 14, 16548 (2024). https://doi.org/10.1038/s41598-024-66470-7
+# The rate of W chromosome degeneration across multiple avian neo-sex chromosomes - Supplementary Code
+
+Sigeman, H., Downing, P.A., Zhang, H. et al. The rate of W chromosome degeneration across multiple avian neo-sex chromosomes. Sci Rep 14, 16548 (2024). https://doi.org/10.1038/s41598-024-66470-7
 
 
 
