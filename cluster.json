@@ -1,0 +1,169 @@
+{
+    "__default__" :
+    {
+        "account" : "naiss2023-5-169",
+        "time" : "4:00:00",
+        "n" : 1,
+        "partition" : "core"
+    },
+    "map" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 19
+    },
+    "sort_bam" :
+    {
+        "time" : "8:00:00",
+        "n" : 4
+    },
+    "remove_duplicates" :
+    {
+        "time" : "8:00:00",
+        "n" : 15
+    },
+    "noMismatch_bam" :
+    {
+        "time" : "8:00:00",
+        "n" : 2
+    },
+    "gencov_bedtools" :
+    {
+        "time" : "20:00:00",
+        "n" : 2
+    },
+    "gencov_bedtoolsall" :
+    {
+        "time" : "20:00:00",
+        "n" : 2
+    },
+    "freebayes_male_gene" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "freebayes_female_gene" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "flagstat" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+   "vcf_male_genes" :
+    {
+        "time" : "10:00:00",
+        "n" : 2
+    },
+   "vcf_female_genes" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },    
+   "freebayes_gene" :
+    {
+        "time" : "10:00:00",
+        "n" : 2
+    },    
+    "coverage_genes" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "coverage_genes_basepair" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "coverage_genes_basepair_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "map_ngm" :
+    {
+        "time" : "3-00:00:00",
+        "n" : 20
+    },
+    "sort_bam_ngm" :
+    {
+        "time" : "8:00:00",
+        "n" : 2
+    },
+    "remove_duplicates_ngm" :
+    {
+        "time" : "8:00:00",
+        "n" : 15
+    },
+    "gencov_bedtools" :
+    {
+        "time" : "20:00:00",
+        "n" : 2
+    },
+    "gencov_bedtoolsall" :
+    {
+        "time" : "20:00:00",
+        "n" : 2
+    },
+    "freebayes_male_gene_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "freebayes_female_gene_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+    "flagstat_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },
+   "vcf_male_genes_ngm" :
+    {
+        "time" : "10:00:00",
+        "n" : 2
+    },
+   "vcf_female_genes_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },    
+   "freebayes_gene_ngm" :
+    {
+        "time" : "10:00:00",
+        "n" : 2
+    },    
+    "coverage_genes_ngm" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },   
+    "coverage_genes_ngm_bamstat04" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },    
+   "freebayes_parallel" :
+    {
+        "time" : "8:00:00",
+        "n" : 14
+    },   
+    "coverage_genes_ngm_bamstat05" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },   
+    "coverage_genes_bwa_bamstat04" :
+    {
+        "time" : "1-00:00:00",
+        "n" : 2
+    },    
+    "coverage_genes_ngm_bamstat04_parallell" :
+    {
+        "time" : "10:00:00",
+        "n" : 18
+    }
+}
